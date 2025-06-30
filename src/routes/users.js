@@ -1,7 +1,7 @@
 const express = require('express');
 const { userSchema, updateUserSchema, changeUserPasswordSchema } = require('../validations/userSchema');
 const userController = require('../controllers/userControllers');
-
+const {parseBoolean} = require("../utils")
 const router = express.Router();
 
 
@@ -25,9 +25,19 @@ router.get('/', async (req, res, next) => {
         columns = req.query.columns.split(',').map(c => c.trim()).filter(c => c.length > 0);
         if (columns.length === 0) columns = ['*'];
       }
-  
+
+      const filters = [];
+
+      if (req.query.admin) {
+        filters.push({ column: 'admin', operator: '=', value: parseBoolean(req.query.admin) });
+      }
+    
+      if (req.query.active) {
+        filters.push({ column: 'active', operator: '=', value: parseBoolean(req.query.active) });
+      }
+
       // Llamamos al controller
-      const users = await userController.getUsers(columns, limit);
+      const users = await userController.getUsers(columns, filters, limit);
   
       if (!users || users.length === 0) {
         return res.status(404).json({ error: 'No users found' });

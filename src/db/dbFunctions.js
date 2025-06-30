@@ -19,6 +19,7 @@ const insertToTable = withDbErrorHandling((tableName, data, done) => {
     const placeholders = keys.map(() => '?').join(', ');
     const sql = `INSERT INTO ${tableName} (${keys.join(', ')}) VALUES (${placeholders})`;
 
+    console.log(sql)
     db.serialize(() => {
       db.run('BEGIN TRANSACTION');
 
@@ -29,13 +30,18 @@ const insertToTable = withDbErrorHandling((tableName, data, done) => {
         }
       
         const insertedId = this.lastID;
+
+        console.log(insertedId)
+        console.log(err)
       
         // Hacemos SELECT para obtener el registro completo
-        db.get('SELECT * FROM users WHERE id = ?', [insertedId], (selectErr, row) => {
+        db.get(`SELECT * FROM ${tableName} WHERE id = ?`, [insertedId], (selectErr, row) => {
           if (selectErr) {
             db.run('ROLLBACK');
             return done(parseSqliteError(selectErr));
           }
+
+          console.log(selectErr)
       
           db.run('ROLLBACK', (rollbackErr) => {
             if (rollbackErr) {
@@ -53,10 +59,11 @@ const insertToTable = withDbErrorHandling((tableName, data, done) => {
  * Fetches data from a given table with optional column selection and row limit.
  * @param {string} tableName - Name of the table to query.
  * @param {string[]} [columns=['*']] - List of column names to retrieve.
+ * @param {Object[]} [filters=[]] - Array of filters: { column, operator, value }.
  * @param {number} [limit] - Optional maximum number of rows to return.
  * @returns {Promise<object[]>} - Resolves with an array of rows from the database.
  */
-const getData = withDbErrorHandling((tableName, columns = ['*'], limit, done) => {
+const getData = withDbErrorHandling((tableName, columns = ['*'], filters = [], limit, done) => {
     if (typeof tableName !== 'string' || !tableName.trim()) {
       return done(new ClientError('Invalid table name.'));
     }
@@ -65,15 +72,43 @@ const getData = withDbErrorHandling((tableName, columns = ['*'], limit, done) =>
       columns = ['*'];
     }
 
+    const allowedOperators = ['=', '!=', '<', '<=', '>', '>=', 'LIKE', 'IN'];
     // Escape column and table names (SQLite does not support parameterized identifiers)
     const columnsSql = columns.map(sanitizeIdentifier).join(', ');
 
+    const whereClauses = [];
+    const values = [];
+
+    for (const filter of filters) {
+      const { column, operator, value } = filter;
+
+      if (!allowedOperators.includes(operator)) {
+        return done(new ClientError(`Invalid operator '${operator}' in filter.`));
+      }
+
+      const col = sanitizeIdentifier(column);
+
+      if (operator === 'IN' && Array.isArray(value)) {
+        const placeholders = value.map(() => '?').join(', ');
+        whereClauses.push(`${col} IN (${placeholders})`);
+        values.push(...value);
+      } else {
+        whereClauses.push(`${col} ${operator} ?`);
+        values.push(value);
+      }
+    }
+
     let sql = `SELECT ${columnsSql} FROM ${tableName}`;
+
+    if (whereClauses.length > 0) {
+      sql += ' WHERE ' + whereClauses.join(' AND ');
+    }
+
     if (limit && Number.isInteger(limit) && limit > 0) {
       sql += ` LIMIT ${limit}`;
     }
 
-    db.all(sql, [], (err, rows) => {
+    db.all(sql, values, (err, rows) => {
       if (err) {
         return done(parseSqliteError(err));
       }
@@ -145,7 +180,7 @@ const updateData = withDbErrorHandling((tableName, id, newRow, done) => {
     
       if (this.changes === 0) {
         db.run('ROLLBACK');
-        return done(new ClientError('User not found or nothing changed'));
+        return done(new ClientError('Element not found or nothing changed'));
       }
     
       db.get(`SELECT * FROM ${tableName} WHERE id = ?`, [id], (selectErr, row) => {
@@ -287,6 +322,12 @@ function parseSqliteError(err) {
       const [, column] = checkMatch;
       return new ClientError(`The column '${column}' does not satisfy the validation constraint.`, msg);
     }
+
+    // FOREIGN KEY constraint failed
+    if (msg.includes('FOREIGN KEY constraint failed')) {
+      return new ClientError('Foreign key constraint failed: one of the referenced values does not exist in the related table.', msg);
+    }
+
   
     // No such table
     const noSuchTableMatch = msg.match(/no such table: (\w+)/);

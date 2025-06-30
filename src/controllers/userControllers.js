@@ -6,12 +6,13 @@ const TABLE_NAME = "users"
 /**
  * Gets users from the DB, optionally filtering columns and limit.
  * @param {Array<string>} [columns=['*']] - Columns to fetch.
+ * @param {Object[]} [filters=[]] - Array of filters: { column, operator, value }.
  * @param {number} [limit] - Maximum number of rows.
  * @returns {Promise<Array<Object>>} - Resolves with user rows.
  */
-async function getUsers(columns = ['*'], limit) {
+async function getUsers(columns = ['*'], filters = [], limit) {
   try {
-    const users = await dbFunctions.getData(TABLE_NAME, columns, limit);
+    const users = await dbFunctions.getData(TABLE_NAME, columns, filters, limit);
     return users;
   } catch (error) {
     throw error; // Propagamos el error para manejarlo en el endpoint
