@@ -28,6 +28,9 @@ async function getPurchases(columns = ['*'], filters = [], limit) {
 async function getPurchaseById(id, columns = ['*']) {
   try {
     const purchases = await dbFunctions.getDataById(TABLE_NAME, id, columns);
+    const purchaseItems = await dbFunctions.getPurchaseItemsWithProductAndCategory(id);
+
+    purchases["purchase_items"] = purchaseItems
     return purchases;
   } catch (error) {
     throw error; // Propagamos el error para manejarlo en el endpoint

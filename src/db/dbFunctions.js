@@ -56,6 +56,74 @@ const insertToTable = withDbErrorHandling((tableName, data, done) => {
 })
 
 /**
+ * Inserts multiple records into the indicated table, simulated (with ROLLBACK).
+ * @param {string} tableName - Table name.
+ * @param {object[]} dataList - Array of objects with the fields to insert.
+ * @returns {Promise<object[]>} - Array of inserted rows or error.
+ */
+const insertManyToTable = withDbErrorHandling((tableName, dataList, done) => {
+  if (!Array.isArray(dataList) || dataList.length === 0) {
+    return done(new ClientError('No data passed for bulk insert.'));
+  }
+
+  const keys = Object.keys(dataList[0]);
+  const placeholders = keys.map(() => '?').join(', ');
+  const sql = `INSERT INTO ${tableName} (${keys.join(', ')}) VALUES (${placeholders})`;
+
+  const insertedRows = [];
+
+  db.serialize(() => {
+    db.run('BEGIN TRANSACTION');
+
+    const stmt = db.prepare(sql);
+
+    let insertError = null;
+
+    for (const data of dataList) {
+      const values = keys.map(k => data[k]);
+
+      stmt.run(values, function (err) {
+        if (err && !insertError) {
+          insertError = parseSqliteError(err);
+        } else if (!err) {
+          insertedRows.push({ id: this.lastID });
+        }
+      });
+
+      if (insertError) break;
+    }
+
+    stmt.finalize(err => {
+      if (err || insertError) {
+        db.run('ROLLBACK');
+        return done(insertError || parseSqliteError(err));
+      }
+
+      // Fetch inserted rows
+      const ids = insertedRows.map(row => row.id);
+      const placeholdersForSelect = ids.map(() => '?').join(', ');
+      const selectSql = `SELECT * FROM ${tableName} WHERE id IN (${placeholdersForSelect})`;
+
+      db.all(selectSql, ids, (selectErr, rows) => {
+        if (selectErr) {
+          db.run('ROLLBACK');
+          return done(parseSqliteError(selectErr));
+        }
+
+        db.run('ROLLBACK', (rollbackErr) => {
+          if (rollbackErr) {
+            return done(parseSqliteError(rollbackErr));
+          }
+
+          return done(null, rows);
+        });
+      });
+    });
+  });
+});
+
+
+/**
  * Fetches data from a given table with optional column selection and row limit.
  * @param {string} tableName - Name of the table to query.
  * @param {string[]} [columns=['*']] - List of column names to retrieve.
@@ -286,6 +354,48 @@ const deleteRowById = withDbErrorHandling((tableName, id, done) => {
 });
 
 
+const getPurchaseItemsWithProductAndCategory = withDbErrorHandling((purchaseId, done) => {
+  const sql = `
+    SELECT
+      pi.id AS item_id,
+      pi.quantity,
+      pi.price_at_time,
+      p.id AS product_id,
+      p.name AS product_name,
+      p.price AS product_price,
+      c.id AS category_id,
+      c.name AS category_name
+    FROM purchase_items pi
+    JOIN products p ON p.id = pi.product_id
+    JOIN categories c ON c.id = p.category_id
+    WHERE pi.purchase_id = ?
+  `;
+
+  db.all(sql, [purchaseId], (err, rows) => {
+    if (err) {
+      return done(parseSqliteError(err));
+    }
+
+    const formattedItems = rows.map(row => ({
+      id: row.item_id,
+      quantity: row.quantity,
+      price_at_time: row.price_at_time,
+      item: {
+        id: row.product_id,
+        name: row.product_name,
+        price: row.product_price,
+        category: {
+          id: row.category_id,
+          name: row.category_name
+        }
+      }
+    }));
+
+    done(null, formattedItems);
+  });
+});
+
+
 
 // Analize the commons errors in SQLite
 function parseSqliteError(err) {
@@ -365,5 +475,6 @@ module.exports = {
   getDataById,
   updateData,
   toggleBooleanField,
-  deleteRowById
+  deleteRowById,
+  getPurchaseItemsWithProductAndCategory
 };
