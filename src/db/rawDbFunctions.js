@@ -1,5 +1,16 @@
-const { ClientError, ServerError } = require('../errors');
+const { ClientError } = require('../errors');
 
+/**
+ * Fetches rows from a table with optional column selection, filtering, and row limiting.
+ *
+ * @param {string} tableName - Name of the table to query.
+ * @param {string[]} [columns=['*']] - Columns to retrieve.
+ * @param {Object[]} [filters=[]] - Optional filters: each { column, operator, value }.
+ * @param {number} [limit] - Optional limit on number of rows returned.
+ * @param {object} db - SQLite database connection.
+ * @returns {Promise<object[]>} - Resolves with the resulting rows.
+ * @throws {ClientError} - On invalid input or SQLite error.
+ */
 const rawGetData = async (tableName, columns = ['*'], filters = [], limit, db, done) => {
   if (typeof tableName !== 'string' || !tableName.trim()) {
     return done(new ClientError('Invalid table name.'));
@@ -52,6 +63,16 @@ const rawGetData = async (tableName, columns = ['*'], filters = [], limit, db, d
   }
 };
 
+/**
+ * Inserts a row into a specified table.
+ *
+ * @param {string} tableName - Name of the table to insert into.
+ * @param {object} data - Object with key-value pairs representing the row.
+ * @param {object} db - SQLite database connection.
+ * @returns {Promise<number>} - Resolves with the ID of the inserted row.
+ * @throws {ClientError} - On empty input or SQLite error.
+ */
+
 async function rawInsertData(tableName, data, db) {
   const keys = Object.keys(data);
   const values = Object.values(data);
@@ -71,6 +92,16 @@ async function rawInsertData(tableName, data, db) {
   }
 }
 
+/**
+ * Updates a row in the specified table by ID.
+ *
+ * @param {string} tableName - Table to update.
+ * @param {number} id - ID of the row to update.
+ * @param {object} newRow - Key-value pairs representing the changes.
+ * @param {object} db - SQLite database connection.
+ * @returns {Promise<number>} - Resolves with the number of rows changed (0 if not found).
+ * @throws {ClientError} - On invalid input or SQLite error.
+ */
 async function rawUpdateData(tableName, id, newRow, db) {
   if (typeof tableName !== 'string' || !tableName.trim()) {
     throw new ClientError('Invalid table name.');
@@ -95,6 +126,16 @@ async function rawUpdateData(tableName, id, newRow, db) {
   }
 }
 
+/**
+ * Toggles a boolean column (0 <-> 1) on a row by ID.
+ *
+ * @param {string} tableName - Table name.
+ * @param {number} id - ID of the row to toggle.
+ * @param {string} columnName - Boolean column to toggle.
+ * @param {object} db - SQLite database connection.
+ * @returns {Promise<number>} - Number of affected rows (0 if not found).
+ * @throws {ClientError} - On invalid input or SQLite error.
+ */
 async function rawToggleColumn(tableName, id, columnName, db) {
   if (typeof tableName !== 'string' || !tableName.trim()) {
     throw new ClientError('Invalid table name.');
@@ -118,6 +159,15 @@ async function rawToggleColumn(tableName, id, columnName, db) {
   }
 }
 
+/**
+ * Deletes a row from a table by its ID.
+ *
+ * @param {string} tableName - Table name.
+ * @param {number} id - ID of the row to delete.
+ * @param {object} db - SQLite database connection.
+ * @returns {Promise<number>} - Number of affected rows (0 if not found).
+ * @throws {ClientError} - On invalid input or SQLite error.
+ */
 async function rawDeleteById(tableName, id, db) {
   if (typeof tableName !== 'string' || !tableName.trim()) {
     throw new ClientError('Invalid table name.');
@@ -133,6 +183,15 @@ async function rawDeleteById(tableName, id, db) {
   }
 }
 
+/**
+ * Executes a raw SQL query with parameters.
+ *
+ * @param {string} sql - The SQL query string.
+ * @param {Array} params - Parameters to bind to the query.
+ * @param {object} db - SQLite database connection.
+ * @returns {Promise<object[]>} - Resolves with resulting rows.
+ * @throws {ClientError} - On query failure.
+ */
 async function rawQuery(sql, params, db) {
   try {
     return await db.all(sql, params);
@@ -141,7 +200,20 @@ async function rawQuery(sql, params, db) {
   }
 }
 
-// Analize the commons errors in SQLite
+/**
+ * Parses SQLite error messages into custom ClientError instances with user-friendly messages.
+ *
+ * Handles known SQLite error types like:
+ *  - UNIQUE constraint failed
+ *  - NOT NULL constraint
+ *  - CHECK constraint
+ *  - Foreign key violations
+ *  - Datatype mismatches
+ *  - Missing table/column
+ *
+ * @param {Error} err - The raw SQLite error.
+ * @returns {ClientError} - Custom error instance with a clearer message.
+ */
 function parseSqliteError(err) {
     const msg = err.message;
     // UNIQUE constraint
@@ -196,15 +268,14 @@ function parseSqliteError(err) {
 }
   
 /**
- * Sanitizes a SQL identifier (table or column name) by:
- *  - Removing any single quotes ('), double quotes ("), or backticks (`) that may be present,
- *  - Wrapping the resulting string in double quotes to safely use it in an SQLite query.
+ * Sanitizes a SQL identifier (e.g., table or column name) by:
+ *  - Removing any single quotes ('), double quotes ("), or backticks (`),
+ *  - Wrapping the resulting string in double quotes to safely use in an SQLite query.
  * 
- * This prevents syntax errors or SQL injection via identifier names,
- * assuming the input is intended as a raw column or table name without quotes.
+ * Prevents syntax errors or SQL injection via identifier names.
  * 
- * @param {string} name - The raw identifier string to sanitize.
- * @returns {string} - The sanitized identifier safely wrapped in double quotes.
+ * @param {string} name - Raw identifier string to sanitize.
+ * @returns {string} - Sanitized identifier wrapped in double quotes, or * if passed directly.
  */
 function sanitizeIdentifier(name) {
     if(name === "*") return "*"

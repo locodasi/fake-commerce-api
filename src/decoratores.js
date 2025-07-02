@@ -1,15 +1,26 @@
 const openDb = require('./db');
 const { ClientError, ServerError } = require('./errors');
+const {parseSqliteError} = require("./db/rawDbFunctions")
 
 /**
- * Wraps a DB logic function to:
- * - Automatically create a Promise
- * - Manage the transaction
- * - Catch any unexpected exceptions and convert them into ServerErrors
- * - Resolve/reject based on returned { err, data } from the wrapped function
- *
- * @param {Function} fn - Function to wrap. Should return { err, data }
- * @returns {Function} - A function that returns a Promise
+ * Wraps a database logic function in a simulated transaction using SQLite.
+ * 
+ * This decorator:
+ * - Opens a new SQLite connection.
+ * - Begins a transaction.
+ * - Executes the provided function with the database as the first parameter.
+ * - Always performs a ROLLBACK (simulation — no changes are committed).
+ * - Converts known errors to `ClientError` or wraps others in `ServerError`.
+ * 
+ * @param {Function} fn - An async function of the form `(db, ...args) => any`.
+ *                        Must accept a `db` connection as its first argument.
+ * 
+ * @returns {Function} - A wrapped async function that returns a Promise and handles transactions/errors.
+ * 
+ * @example
+ * const getData = withSimulatedTransaction(async (db, tableName) => {
+ *   return await rawGetData(tableName, ['*'], [], null, db);
+ * });
  */
 function withSimulatedTransaction(fn) {
   return async (...args) => {
@@ -49,30 +60,4 @@ function withSimulatedTransaction(fn) {
   };
 }
 
-
-/**
- * Wraps a logic function to:
- * - Automatically create a Promise
- * - Catch any unexpected exceptions and convert them into ServerErrors
- * - Resolve/reject based on returned { err, data } from the wrapped function
- *
- * @param {Function} fn - Function to wrap. Should return { err, data }
- * @returns {Function} - A function that returns a Promise
- */
-function withPromise(fn) {
-  return (...args) => {
-    return new Promise((resolve, reject) => {
-      try {
-        fn(...args, (err, data) => {
-          if (err) return reject(err);
-          resolve(data);
-        });
-      } catch (error) {
-        reject(error);
-      }
-    });
-  };
-}
-
-
-module.exports = { withSimulatedTransaction, withPromise };
+module.exports = { withSimulatedTransaction };

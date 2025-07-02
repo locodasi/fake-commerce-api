@@ -6,7 +6,7 @@ const {ClientError} = require("../errors")
  * Inserts a record into the indicated table, simulated (with ROLLBACK).
  * @param {string} tableName - Table name.
  * @param {object} data - Object with the fields to be inserted.
- * @returns {Promise<object>} - Result with inserted object or error.
+ * @returns {Promise<object>} - Resolves with the inserted row (not committed).
  */
 const insertToTable = withSimulatedTransaction(async (db, tableName, data) => {
   const insertedId = await rawInsertData(tableName, data, db);
@@ -21,7 +21,6 @@ const insertToTable = withSimulatedTransaction(async (db, tableName, data) => {
 
   return result[0] || null; // devolvemos el registro insertado
 });
-
 
 /**
  * Fetches data from a given table with optional column selection and row limit.
@@ -39,11 +38,11 @@ const getData = withSimulatedTransaction(async (db, tableName, columns = ['*'], 
 
 
 /**
- * Fetches one row from a given table with optional column selection.
+ * Fetches one row from a given table by ID with optional column selection.
  * @param {string} tableName - Name of the table to query.
- * @param {number} id - The id.
+ * @param {number} id - ID of the row to fetch.
  * @param {string[]} [columns=['*']] - List of column names to retrieve.
- * @returns {Promise<object[]>} - Resolves with an array of rows from the database.
+ * @returns {Promise<object|null>} - Resolves with a single row or null.
  */
 const getDataById = withSimulatedTransaction(async (db, tableName, id, columns = ['*']) => {
   const rows = await rawGetData(
@@ -58,11 +57,12 @@ const getDataById = withSimulatedTransaction(async (db, tableName, id, columns =
 });
 
 /**
- * Update a row.
- * @param {string} tableName - Name of the table to query.
- * @param {number} id - The id.
- * @param {Object} newRow - The changes.
- * @returns {Promise<object[]>} - Resolves with an array of rows from the database.
+ * Updates a row in a table by ID.
+ * @param {string} tableName - Name of the table.
+ * @param {number} id - ID of the row to update.
+ * @param {Object} newRow - The changes to apply.
+ * @returns {Promise<object>} - Resolves with the updated row.
+ * @throws {ClientError} - If no changes were made or the row does not exist.
  */
 const updateData = withSimulatedTransaction(async (db, tableName, id, newRow) => {
   const changes = await rawUpdateData(tableName, id, newRow, db);
@@ -84,13 +84,12 @@ const updateData = withSimulatedTransaction(async (db, tableName, id, newRow) =>
 
 
 /**
- * Simulates toggling a boolean field (e.g., active) on a given row in a table.
- * The change is rolled back — useful for dry-run/testing.
- *
+ * Simulates toggling a boolean field (0/1) in a row.
  * @param {string} tableName - Name of the table.
- * @param {number} id - ID of the row to modify.
- * @param {string} columnName - Name of the boolean column to toggle (0 <-> 1).
- * @returns {Promise<object>} - Resolves with the modified row (not committed).
+ * @param {number} id - ID of the row to toggle.
+ * @param {string} columnName - Boolean column to toggle.
+ * @returns {Promise<object>} - Resolves with the toggled row (not committed).
+ * @throws {ClientError} - If no row was affected.
  */
 const toggleBooleanField = withSimulatedTransaction(async (db, tableName, id, columnName) => {
   const changes = await rawToggleColumn(tableName, id, columnName, db);
@@ -112,13 +111,13 @@ const toggleBooleanField = withSimulatedTransaction(async (db, tableName, id, co
 
 
 
+
 /**
- * Simulates deleting a row by ID from a given table.
- * The change is rolled back — useful for dry-run/testing.
- *
+ * Simulates deleting a row by ID from a table.
  * @param {string} tableName - Name of the table.
  * @param {number} id - ID of the row to delete.
- * @returns {Promise<object>} - Resolves with the row that would have been deleted (not committed).
+ * @returns {Promise<object>} - Resolves with an object confirming the deletion (not committed).
+ * @throws {ClientError} - If no row was affected.
  */
 const deleteRowById = withSimulatedTransaction(async (db, tableName, id) => {
   const changes = await rawDeleteById(tableName, id, db);
@@ -130,7 +129,14 @@ const deleteRowById = withSimulatedTransaction(async (db, tableName, id) => {
   return { id }; // Devolvemos el ID como confirmación
 });
 
-
+/**
+ * Fetches purchase items for a purchase ID including product and category info.
+ * This uses a custom SQL join across purchase_items, products, and categories.
+ * Simulated — changes not committed.
+ *
+ * @param {number} purchaseId - The ID of the purchase to fetch items for.
+ * @returns {Promise<object[]>} - Resolves with a list of items including nested product and category data.
+ */
 const getPurchaseItemsWithProductAndCategory = withSimulatedTransaction(async (db, purchaseId) => {
   const sql = `
     SELECT
