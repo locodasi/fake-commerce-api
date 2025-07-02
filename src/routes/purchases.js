@@ -36,8 +36,6 @@ router.get('/', async (req, res, next) => {
         filters.push({ column: 'created_at', operator: '<=', value: req.query.max_date });
       }
 
-      console.log(filters)
-  
       // Llamamos al controller
       const purchases = await purchasesController.getPurchases(columns, filters, limit);
   
