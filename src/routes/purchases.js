@@ -1,5 +1,5 @@
 const express = require('express');
-const { purchaseSchema } = require('../validations/purchaseSchema');
+const { purchaseSchema, createPurchaseSchema } = require('../validations/purchaseSchema');
 const purchasesController = require('../controllers/purchaseControllers');
 
 const router = express.Router();
@@ -79,7 +79,7 @@ router.get('/:id', async (req, res, next) => {
 
 // POST - Simulado
 router.post('/', async (req, res) => {
-  const result = purchaseSchema.safeParse(req.body);
+  const result = createPurchaseSchema.safeParse(req.body);
   if (!result.success) {
     return res.status(400).json({ error: result.error.format() });
   }

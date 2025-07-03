@@ -27,11 +27,8 @@ async function getPurchases(columns = ['*'], filters = [], limit) {
  */
 async function getPurchaseById(id, columns = ['*']) {
   try {
-    const purchases = await dbFunctions.getDataById(TABLE_NAME, id, columns);
-    const purchaseItems = await dbFunctions.getPurchaseItemsWithProductAndCategory(id);
-
-    purchases["purchase_items"] = purchaseItems
-    return purchases;
+    const purchase = await dbFunctions.getPurchase(id, columns)
+    return purchase;
   } catch (error) {
     throw error; // Propagamos el error para manejarlo en el endpoint
   }
@@ -44,7 +41,7 @@ async function getPurchaseById(id, columns = ['*']) {
  */
 async function createPurchase(purchaseData) {
   try {
-    const purchases = await dbFunctions.insertToTable(TABLE_NAME, purchaseData);
+    const purchases = await dbFunctions.createPurchase(purchaseData);
     return purchases;
   } catch (error) {
     throw error;

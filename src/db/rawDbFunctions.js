@@ -11,10 +11,8 @@ const { ClientError } = require('../errors');
  * @returns {Promise<object[]>} - Resolves with the resulting rows.
  * @throws {ClientError} - On invalid input or SQLite error.
  */
-const rawGetData = async (tableName, columns = ['*'], filters = [], limit, db, done) => {
-  if (typeof tableName !== 'string' || !tableName.trim()) {
-    return done(new ClientError('Invalid table name.'));
-  }
+const rawGetData = async (tableName, columns = ['*'], filters = [], limit, db) => {
+  validateString(tableName, 'Invalid table name.')
 
   if (!Array.isArray(columns) || columns.length === 0) {
     columns = ['*'];
@@ -30,7 +28,7 @@ const rawGetData = async (tableName, columns = ['*'], filters = [], limit, db, d
     const { column, operator, value } = filter;
 
     if (!allowedOperators.includes(operator)) {
-      return done(new ClientError(`Invalid operator '${operator}' in filter.`));
+      throw new ClientError(`Invalid operator '${operator}' in filter.`);
     }
 
     const col = sanitizeIdentifier(column);
@@ -93,6 +91,40 @@ async function rawInsertData(tableName, data, db) {
 }
 
 /**
+ * Executes a single SQL INSERT for multiple rows.
+ *
+ * @param {string} tableName - Table name.
+ * @param {object[]} dataArray - Array of objects to insert.
+ * @param {object} db - SQLite database connection.
+ * @returns {Promise<number>} - Last inserted row ID of the last insert.
+ * @throws {ClientError} - On invalid input or SQLite error.
+ */
+async function rawInsertBulk(tableName, dataArray, db) {
+  if (!Array.isArray(dataArray) || dataArray.length === 0) {
+    throw new ClientError('No data provided for bulk insert.');
+  }
+
+  const keys = Object.keys(dataArray[0]);
+  if (keys.length === 0) {
+    throw new ClientError('Each data object must have at least one field.');
+  }
+
+  const rowPlaceholders = `(${keys.map(() => '?').join(', ')})`;
+  const allPlaceholders = dataArray.map(() => rowPlaceholders).join(', ');
+  const sql = `INSERT INTO ${tableName} (${keys.join(', ')}) VALUES ${allPlaceholders}`;
+
+  const values = dataArray.flatMap(row => keys.map(k => row[k]));
+
+  try {
+    const result = await db.run(sql, values);
+    return result.lastID;
+  } catch (err) {
+    throw parseSqliteError(err);
+  }
+}
+
+
+/**
  * Updates a row in the specified table by ID.
  *
  * @param {string} tableName - Table to update.
@@ -103,9 +135,7 @@ async function rawInsertData(tableName, data, db) {
  * @throws {ClientError} - On invalid input or SQLite error.
  */
 async function rawUpdateData(tableName, id, newRow, db) {
-  if (typeof tableName !== 'string' || !tableName.trim()) {
-    throw new ClientError('Invalid table name.');
-  }
+  validateString(tableName, 'Invalid table name.')
 
   const keys = Object.keys(newRow);
   if (keys.length === 0) {
@@ -137,13 +167,9 @@ async function rawUpdateData(tableName, id, newRow, db) {
  * @throws {ClientError} - On invalid input or SQLite error.
  */
 async function rawToggleColumn(tableName, id, columnName, db) {
-  if (typeof tableName !== 'string' || !tableName.trim()) {
-    throw new ClientError('Invalid table name.');
-  }
+  validateString(tableName, 'Invalid table name.')
 
-  if (typeof columnName !== 'string' || !columnName.trim()) {
-    throw new ClientError('Invalid column name.');
-  }
+  validateString(columnName, 'Invalid column name.')
 
   const toggleSql = `
     UPDATE ${tableName}
@@ -169,9 +195,7 @@ async function rawToggleColumn(tableName, id, columnName, db) {
  * @throws {ClientError} - On invalid input or SQLite error.
  */
 async function rawDeleteById(tableName, id, db) {
-  if (typeof tableName !== 'string' || !tableName.trim()) {
-    throw new ClientError('Invalid table name.');
-  }
+  validateString(tableName, 'Invalid table name.')
 
   const deleteSql = `DELETE FROM ${tableName} WHERE id = ?`;
 
@@ -283,11 +307,28 @@ function sanitizeIdentifier(name) {
     return `"${cleaned}"`;
 }
 
+/**
+ * Validates that a value is a non-empty string.
+ *
+ * @param {any} value - The value to validate.
+ * @param {string} errorMessage - The error message to throw if validation fails.
+ * @returns {true} - Returns true if the value is a valid non-empty string.
+ * @throws {ClientError} - If the value is not a string or is an empty/whitespace-only string.
+ */
+function validateString(value, errorMessage) {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new ClientError(errorMessage);
+  }
+
+  return true
+}
+
 module.exports = {
   rawGetData,
   rawInsertData,
   rawUpdateData,
   rawToggleColumn,
   rawDeleteById,
-  rawQuery
+  rawQuery,
+  rawInsertBulk
 };

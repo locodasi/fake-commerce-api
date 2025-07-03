@@ -6,4 +6,14 @@ const purchaseSchema = z.object({
   price: z.number().min(0.1,{ message: "The price cannot be zero or less." })
 });
 
-module.exports = { purchaseSchema };
+const createPurchaseSchema = z.object({
+  buyer_id: z.number().positive().min(1, { message: "Invalid user_id." }),
+  products: z.array(
+    z.object({
+      product_id: z.number().positive().min(1, { message: "Invalid product_id." }),
+      quantity: z.number().positive().min(1, { message: "Invalid quantity." }),
+    })
+  ).min(1, { message: "At least one product is required." }),
+});
+
+module.exports = { purchaseSchema, createPurchaseSchema };

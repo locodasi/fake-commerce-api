@@ -1,5 +1,5 @@
 const { withSimulatedTransaction } = require('../decoratores');
-const { rawGetData, rawInsertData, rawUpdateData, rawToggleColumn, rawDeleteById, rawQuery } = require('./rawDbFunctions');
+const { rawGetData, rawInsertData, rawUpdateData, rawToggleColumn, rawDeleteById, rawQuery, rawInsertBulk } = require('./rawDbFunctions');
 const {ClientError} = require("../errors")
 
 /**
@@ -130,14 +130,53 @@ const deleteRowById = withSimulatedTransaction(async (db, tableName, id) => {
 });
 
 /**
- * Fetches purchase items for a purchase ID including product and category info.
- * This uses a custom SQL join across purchase_items, products, and categories.
- * Simulated — changes not committed.
+ * Retrieves a purchase by its ID, including its items,
+ * each with related product and category information.
  *
- * @param {number} purchaseId - The ID of the purchase to fetch items for.
- * @returns {Promise<object[]>} - Resolves with a list of items including nested product and category data.
+ * @param {object} db - The SQLite database connection.
+ * @param {number} purchaseId - The ID of the purchase to retrieve.
+ * @param {string[]} columns - Array of column names to retrieve from the `purchases` table.
+ * @returns {Promise<object>} - A promise that resolves to the purchase object,
  */
-const getPurchaseItemsWithProductAndCategory = withSimulatedTransaction(async (db, purchaseId) => {
+const getPurchase = withSimulatedTransaction(async (db, purchaseId, columns) => {
+  const purchase = (await rawGetData("purchases",columns, [{column: "id", operator: "=", value: purchaseId}], 1, db))[0]
+  if(purchase === undefined){
+    return null
+  }
+  const purchaseItems = await getPurchaseItemsWithProductAndCategory(db, purchaseId);
+
+  purchase["purchase_items"] = purchaseItems
+  return purchase
+});
+
+const createPurchase = withSimulatedTransaction(async (db, purchaseData) => {
+  const products = await rawGetData("products",["*"],[{column: "id", operator: "IN", value: purchaseData.products.map(p => p.product_id)}], null, db)
+
+  let total = 0;
+
+  const purchaseItemsToInsert = []
+
+  for(let item of purchaseData.products){
+    const product_data = products.find(p => p.id === item.product_id)
+    item["price_at_time"] = product_data.price
+    total += product_data.price * item.quantity
+    purchaseItemsToInsert.push(item)
+  }
+
+  const roundedTotal = parseFloat(total.toFixed(2));
+
+  const purchaseId = await rawInsertData("purchases", {buyer_id: purchaseData.buyer_id, total: roundedTotal}, db);
+  purchaseItemsToInsert.forEach(p => p["purchase_id"] = purchaseId)
+  await rawInsertBulk("purchase_items",purchaseItemsToInsert, db)
+  
+  const purchase = (await rawGetData("purchases",["*"], [{column: "id", operator: "=", value: purchaseId}], 1, db))[0]
+  const purchaseItems = await getPurchaseItemsWithProductAndCategory(db, purchaseId);
+
+  purchase["purchase_items"] = purchaseItems
+  return purchase
+});
+
+const getPurchaseItemsWithProductAndCategory = async (db, purchaseId) => {
   const sql = `
     SELECT
       pi.id AS item_id,
@@ -170,8 +209,7 @@ const getPurchaseItemsWithProductAndCategory = withSimulatedTransaction(async (d
       }
     }
   }));
-});
-
+};
 
   
 module.exports = {
@@ -181,5 +219,6 @@ module.exports = {
   updateData,
   toggleBooleanField,
   deleteRowById,
-  getPurchaseItemsWithProductAndCategory
+  getPurchase,
+  createPurchase
 };
