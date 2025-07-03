@@ -52,7 +52,7 @@ Creates a new purchase. Requires:
 
 ```json
 {
-  "buyer_id": 1,
+  "buyer_id": 5,
   "products": [
     { "product_id": 3, "quantity": 2 },
     { "product_id": 7, "quantity": 1 }
