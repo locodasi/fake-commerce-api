@@ -14,7 +14,7 @@
   - Purchases (`purchases`)
   - Purchase Items (`purchase_items`)
 - Full shopping cart → purchase flow.
-- Designed for use with React, Vue, Svelte, and other frontend frameworks.
+- Suitable for use with any frontend technology, including HTML/JS, React, Vue, and more.
 
 ---
 
@@ -94,4 +94,4 @@ MIT — Free to use for learning, teaching, or development.
 
 ## ✍️ Author
 
-Created by [Luvas Da Silva](https://github.com/locodasi)
+Created by [Lucas Da Silva](https://github.com/locodasi)
