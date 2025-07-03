@@ -30,8 +30,9 @@ npm install
 
 ```bash
 npm run dev
-By default, the API runs at: http://localhost:3000
 ```
+
+By default, the API runs at: http://localhost:3000
 
 ---
 
