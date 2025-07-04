@@ -1,5 +1,5 @@
 const express = require('express');
-const { userSchema, updateUserSchema, changeUserPasswordSchema } = require('../validations/userSchema');
+const { userSchema, updateUserSchema, changeUserPasswordSchema, loginSchema } = require('../validations/userSchema');
 const userController = require('../controllers/userControllers');
 const {parseBoolean} = require("../utils")
 const router = express.Router();
@@ -87,6 +87,24 @@ router.post('/', async (req, res) => {
   const user = await userController.createUser(result.data);
 
   res.json({ data: user });
+});
+
+router.post('/login', async (req, res) => {
+  const result = loginSchema.safeParse(req.body);
+  if (!result.success) {
+    return res.status(400).json({ error: result.error.format() });
+  }
+
+  const filters = [{ column: 'email', operator: '=', value: result.data.email }];
+
+  // Llamamos al controller
+  const user = await userController.getUsers(["*"], filters, 1);
+
+  if(user[0] === undefined) return res.status(400).json({ error: "This email don't exist" });
+
+  if(user[0].password !== result.data.password) return res.status(400).json({ error: "Invalid password" });
+
+  return res.status(200).json({ user: user, token: "in develope" });
 });
 
 router.put('/active/:id', async (req, res) => {

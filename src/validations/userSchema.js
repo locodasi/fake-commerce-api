@@ -42,4 +42,9 @@ const changeUserPasswordSchema = z.object({
   newPassword: z.string().min(7, { message: "The password cannot be less than 7 characters." }),
 })
 
-module.exports = { userSchema, updateUserSchema, changeUserPasswordSchema };
+const loginSchema = z.object({
+  email: z.string().email({ message: "Invalid email" }),
+  password: z.string(),
+})
+
+module.exports = { userSchema, updateUserSchema, changeUserPasswordSchema, loginSchema};
